@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Análise de Canais - Responsivo</title>
+    <title>Análise de Canais - GitHub Pages</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
@@ -11,16 +11,9 @@
     <style>
         body, html { height: 100%; margin: 0; background-color: #0f172a; overflow: hidden; }
         .main-container { height: 100vh; display: flex; flex-direction: column; width: 100%; }
-        /* Garante que o container do gráfico seja flexível e responsivo */
-        .chart-wrapper { 
-            flex-grow: 1; 
-            position: relative; 
-            width: 100%; 
-            background: white; 
-            margin: 0; 
-            padding: 10px;
-        }
+        .chart-wrapper { flex-grow: 1; position: relative; width: 100%; background: white; padding: 10px; }
         canvas { width: 100% !important; height: 100% !important; }
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(1); }
     </style>
 </head>
 <body class="text-slate-200">
@@ -28,12 +21,15 @@
     <div class="main-container">
         <header class="p-4 bg-slate-900 border-b border-slate-700 shadow-xl">
             <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-                <h1 class="text-lg font-bold text-blue-400 uppercase tracking-tighter">Monitoramento 01-02-03</h1>
+                <div>
+                    <h1 class="text-lg font-bold text-blue-400 uppercase tracking-tighter">Dashboard de Sensores</h1>
+                    <p id="data-range-text" class="text-[10px] text-slate-500">Carregando dados...</p>
+                </div>
                 
                 <div class="flex flex-wrap justify-center items-center gap-3 bg-slate-800 p-2 rounded-lg border border-slate-700 w-full md:w-auto">
                     <div class="flex items-center gap-2">
                         <input type="datetime-local" id="start" class="bg-slate-700 text-white border-none rounded text-xs p-1 focus:ring-2 ring-blue-500">
-                        <span class="text-xs">às</span>
+                        <span class="text-xs text-slate-400">até</span>
                         <input type="datetime-local" id="end" class="bg-slate-700 text-white border-none rounded text-xs p-1 focus:ring-2 ring-blue-500">
                     </div>
 
@@ -43,20 +39,20 @@
                         <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="v3" checked onchange="updateChart()" class="accent-orange-500"> <span class="text-xs font-bold">CH3</span></label>
                     </div>
 
-                    <button onclick="updateChart()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-1 px-4 rounded transition w-full md:w-auto">FILTRAR</button>
+                    <button onclick="updateChart()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-1 px-4 rounded transition">FILTRAR</button>
                 </div>
             </div>
 
-            <div class="grid grid-cols-3 gap-2 mt-3">
-                <div class="bg-slate-800/50 p-1 rounded border-l-4 border-blue-500 text-center">
+            <div class="grid grid-cols-3 gap-2 mt-3 text-center">
+                <div class="bg-slate-800/50 p-1 rounded border-l-4 border-blue-500">
                     <span class="block text-[9px] text-slate-400">MÉDIA CH1</span>
                     <span id="m1" class="text-sm font-bold text-blue-400">--</span>
                 </div>
-                <div class="bg-slate-800/50 p-1 rounded border-l-4 border-green-500 text-center">
+                <div class="bg-slate-800/50 p-1 rounded border-l-4 border-green-500">
                     <span class="block text-[9px] text-slate-400">MÉDIA CH2</span>
                     <span id="m2" class="text-sm font-bold text-green-400">--</span>
                 </div>
-                <div class="bg-slate-800/50 p-1 rounded border-l-4 border-orange-500 text-center">
+                <div class="bg-slate-800/50 p-1 rounded border-l-4 border-orange-500">
                     <span class="block text-[9px] text-slate-400">MÉDIA CH3</span>
                     <span id="m3" class="text-sm font-bold text-orange-400">--</span>
                 </div>
@@ -68,7 +64,7 @@
         </div>
 
         <footer class="p-2 text-[10px] text-slate-500 flex justify-between bg-slate-900 border-t border-slate-800">
-            <span id="status">Status: Aguardando...</span>
+            <span id="status">Lendo arquivo CSV...</span>
             <span>Registros: <span id="count">0</span></span>
         </footer>
     </div>
@@ -81,19 +77,15 @@
         async function loadCSV() {
             try {
                 const response = await fetch(FILE_NAME);
-                if (!response.ok) throw new Error("Não foi possível carregar o arquivo CSV.");
-                
+                if (!response.ok) throw new Error();
                 const text = await response.text();
                 const lines = text.split('\n');
                 
                 for (let i = 1; i < lines.length; i++) {
                     const col = lines[i].replace(/"/g, '').split(';');
                     if (col.length < 9) continue;
-
-                    // Parse Data: DD/MM/YYYY e Hora
                     const d = col[0].split('/');
                     const iso = `${d[2]}-${d[1]}-${d[0]}T${col[1]}`;
-                    
                     fullData.push({
                         t: luxon.DateTime.fromISO(iso).toMillis(),
                         v1: parseFloat(col[4].replace(',', '.')),
@@ -101,29 +93,43 @@
                         v3: parseFloat(col[8].replace(',', '.'))
                     });
                 }
-
-                // ORDENAR POR DATA (Garante que a primeira/última data estejam certas)
                 fullData.sort((a, b) => a.t - b.t);
-
-                // DEFINIR PRIMEIRA E ÚLTIMA DATA POR DEFAULT
-                if(fullData.length > 0) {
-                    const firstDate = luxon.DateTime.fromMillis(fullData[0].t).toFormat("yyyy-MM-dd'T'HH:mm");
-                    const lastDate = luxon.DateTime.fromMillis(fullData[fullData.length-1].t).toFormat("yyyy-MM-dd'T'HH:mm");
-                    document.getElementById('start').value = firstDate;
-                    document.getElementById('end').value = lastDate;
-                }
-
-                document.getElementById('status').innerText = "Arquivo carregado com sucesso.";
+                
+                configurarFiltrosData();
                 initChart();
-            } catch (error) {
-                document.getElementById('status').innerText = "Erro: Certifique-se de rodar em um servidor local.";
-                console.error(error);
+                document.getElementById('status').innerText = "Dados carregados.";
+            } catch (e) {
+                document.getElementById('status').innerText = "Erro: Arquivo não encontrado ou erro de CORS.";
             }
+        }
+
+        function configurarFiltrosData() {
+            if (fullData.length === 0) return;
+
+            const minTs = fullData[0].t;
+            const maxTs = fullData[fullData.length - 1].t;
+
+            const minDateStr = luxon.DateTime.fromMillis(minTs).toFormat("yyyy-MM-dd'T'HH:mm");
+            const maxDateStr = luxon.DateTime.fromMillis(maxTs).toFormat("yyyy-MM-dd'T'HH:mm");
+
+            const startInput = document.getElementById('start');
+            const endInput = document.getElementById('end');
+
+            // Define os limites físicos do seletor de data
+            startInput.min = minDateStr;
+            startInput.max = maxDateStr;
+            endInput.min = minDateStr;
+            endInput.max = maxDateStr;
+
+            // Valores iniciais padrão
+            startInput.value = minDateStr;
+            endInput.value = maxDateStr;
+
+            document.getElementById('data-range-text').innerText = `Disponível: ${minDateStr.replace('T',' ')} até ${maxDateStr.replace('T',' ')}`;
         }
 
         function initChart() {
             const ctx = document.getElementById('mainChart').getContext('2d');
-            
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -135,26 +141,15 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false, // CRITICAL PARA RESPONSIVIDADE
-                    resizeDelay: 100, // Suaviza o redimensionamento
+                    maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     scales: {
-                        x: { 
-                            type: 'time', 
-                            time: { unit: 'day', displayFormats: { day: 'dd/MM' } },
-                            ticks: { color: '#64748b' }
-                        },
-                        y: { 
-                            ticks: { color: '#64748b' },
-                            title: { display: true, text: '°C' }
-                        }
+                        x: { type: 'time', time: { unit: 'day' }, ticks: { color: '#64748b' } },
+                        y: { ticks: { color: '#64748b' } }
                     },
-                    plugins: {
-                        legend: { display: false }
-                    }
+                    plugins: { legend: { display: false } }
                 }
             });
-
             updateChart();
         }
 
@@ -162,31 +157,23 @@
             const tStart = luxon.DateTime.fromISO(document.getElementById('start').value).toMillis();
             const tEnd = luxon.DateTime.fromISO(document.getElementById('end').value).toMillis();
             
-            const show1 = document.getElementById('v1').checked;
-            const show2 = document.getElementById('v2').checked;
-            const show3 = document.getElementById('v3').checked;
-
             const filtered = fullData.filter(d => d.t >= tStart && d.t <= tEnd);
 
-            chart.data.datasets[0].data = show1 ? filtered.map(d => ({x: d.t, y: d.v1})) : [];
-            chart.data.datasets[1].data = show2 ? filtered.map(d => ({x: d.t, y: d.v2})) : [];
-            chart.data.datasets[2].data = show3 ? filtered.map(d => ({x: d.t, y: d.v3})) : [];
+            chart.data.datasets[0].data = document.getElementById('v1').checked ? filtered.map(d => ({x: d.t, y: d.v1})) : [];
+            chart.data.datasets[1].data = document.getElementById('v2').checked ? filtered.map(d => ({x: d.t, y: d.v2})) : [];
+            chart.data.datasets[2].data = document.getElementById('v3').checked ? filtered.map(d => ({x: d.t, y: d.v3})) : [];
 
-            chart.update('none'); // Update sem animação para ser mais rápido com muitos dados
+            chart.update('none');
             
             const avg = (arr) => arr.length ? (arr.reduce((a,b) => a+b, 0)/arr.length).toFixed(2) + '°' : '--';
-            document.getElementById('m1').innerText = show1 ? avg(filtered.map(d => d.v1)) : '--';
-            document.getElementById('m2').innerText = show2 ? avg(filtered.map(d => d.v2)) : '--';
-            document.getElementById('m3').innerText = show3 ? avg(filtered.map(d => d.v3)) : '--';
+            document.getElementById('m1').innerText = avg(filtered.map(d => d.v1));
+            document.getElementById('m2').innerText = avg(filtered.map(d => d.v2));
+            document.getElementById('m3').innerText = avg(filtered.map(d => d.v3));
             document.getElementById('count').innerText = filtered.length.toLocaleString();
         }
 
-        // Listener para redimensionar o gráfico caso a janela mude de tamanho
-        window.addEventListener('resize', () => {
-            if (chart) chart.resize();
-        });
-
         window.onload = loadCSV;
+        window.addEventListener('resize', () => chart && chart.resize());
     </script>
 </body>
 </html>
